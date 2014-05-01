@@ -117,6 +117,7 @@ void convert_vtk(p_vtk vtk, const char* outfilename) {
                 break;
             case 4:
                 vtk->version = (token != "") ? token : "";
+                break;
             default:
                 break;
         }
