@@ -1,12 +1,12 @@
 vtk2json
 ========
 
-Converts VTK to JSON for three.js JSONLoader
+Converts VTK to JSON for the three.js JSONLoader
 
-Currently only supports OS X 10.9
+Currently only supports ASCII VTK files. Compile using g++.
+Uses GNU++98 `[-std=gnu++98]` and `libstdc++`.
 
 Compiling
 ---
-1. ./install_clibs.sh (not needed on OS X)
-2. ./compile.sh
-3. vtk2json [vtk file] [output file]
+1. `./compile.sh` or `g++ vtk2json.cpp -O3 -o vtk2json`
+2. Run `vtk2json [vtk file] [output file]`

@@ -14,6 +14,7 @@
 #include <sstream>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "vtk2json.h"
 
@@ -22,9 +23,9 @@ using namespace std;
 bool debug = false;
 
 typedef struct t_vtk_ {
-    string version;
-    string comment;
-    string dataset;
+    char* version;
+    char* comment;
+    char dataset[256];
     long npoints;
     long npolygons;
     long polysize;
@@ -33,7 +34,7 @@ typedef struct t_vtk_ {
 } t_vtk;
 
 static ifstream fs; // VTK filestream
-ofstream outfile;    // Output file
+static ofstream outfile;    // Output file
 
 static void error(string message) {
     cerr << message + '\n';
@@ -41,6 +42,10 @@ static void error(string message) {
 }
 
 static void vtk_init(p_vtk vtk) {
+    vtk->version = (char*) malloc(256*sizeof(char));
+    vtk->comment = (char*) malloc(256*sizeof(char));
+    //vtk->dataset = (char*) malloc(256*sizeof(char));
+
     vtk->npoints = 0;
     vtk->npolygons = 0;
     vtk->polysize = 0;
@@ -48,7 +53,7 @@ static void vtk_init(p_vtk vtk) {
 }
 
 static p_vtk vtk_alloc() {
-    p_vtk vtk = (p_vtk) calloc(1, sizeof(p_vtk)); //TODO Free the memory
+    p_vtk vtk = (p_vtk) calloc(1, sizeof(p_vtk));
     if (!vtk) return NULL;
     vtk_init(vtk);
     return vtk;
@@ -78,30 +83,27 @@ p_vtk vtk_open(const char *filename) {
 
 // read a line from the filestream
 static bool EMPTY_LINE = false;
-stringstream readLine() {
+stringstream* readLine() {
     string line;
     getline(fs, line);
-    
-    stringstream lstream(line);
-    lstream << line;
     
     if (line.empty()) {
         EMPTY_LINE = true;
     } else {
         EMPTY_LINE = false;
     }
-    return lstream;
+    return new stringstream(line);
 }
 
 void convert_vtk(p_vtk vtk, const char* outfilename) {
     string token;
     
     // File version and identifier
-    stringstream line;
+    stringstream *line;
     line = readLine();
     
     int count = 0;
-    while ( getline(line, token, ' ') ) {
+    while ( getline(*line, token, ' ') ) {
         switch (count) {
             case 0:
                 if (token != "#") error("VTK File invalid");
@@ -116,7 +118,8 @@ void convert_vtk(p_vtk vtk, const char* outfilename) {
                 if (token != "Version") error("VTK File invalid");
                 break;
             case 4:
-                vtk->version = (token != "") ? token : "";
+                strcpy(vtk->version, token.c_str());
+                //vtk->version = (token != "") ? token.c_str() : "";
                 break;
             default:
                 break;
@@ -125,10 +128,11 @@ void convert_vtk(p_vtk vtk, const char* outfilename) {
     }
     
     // Header comment
-    vtk->comment = readLine().str();
+    strcpy(vtk->comment, readLine()->str().c_str());
+    //vtk->comment = readLine()->str();
     
     // File format (binary/ascii)
-    token = readLine().str();
+    token = readLine()->str();
     if (token == "ASCII") {
         vtk->io_mode = VTK_ASCII;
     } else if (token == "BINARY") {
@@ -139,11 +143,14 @@ void convert_vtk(p_vtk vtk, const char* outfilename) {
     
     // Dataset
     line = readLine();
-    getline(line, token, ' ');
+    getline(*line, token, ' ');
     if (token != "DATASET") error("Invalid dataset structure");
     
-    getline(line, token, ' ');
-    vtk->dataset = token;
+    getline(*line, token, ' ');
+    //vtk->dataset = token;
+    //vtk->dataset = (char*) malloc(256*sizeof(char));
+    sprintf(vtk->dataset, "%s", token.c_str());
+    //strcpy(vtk->dataset, token.c_str());
     
     
     // Echo header for checking
@@ -163,13 +170,13 @@ void convert_vtk(p_vtk vtk, const char* outfilename) {
     // TODO check that we are reading floats
     // Dataset attributes
     line = readLine();
-    getline(line, token, ' ');
+    getline(*line, token, ' ');
     if (token != "POINTS") error("Invalid dataset attributes");
     
-    getline(line, token, ' ');
-    vtk->npoints = stol(token);
+    getline(*line, token, ' ');
+    vtk->npoints = atol(token.c_str());
     
-    getline(line, token, ' ');
+    getline(*line, token, ' ');
     if (token == "float") {
         vtk->data_mode = VTK_FLOAT;
     } else if (token == "double" ) {
@@ -208,9 +215,9 @@ void convert_vtk(p_vtk vtk, const char* outfilename) {
     float p;
     long point_index = 0;
     line = readLine();
-    while ( line.good() && !EMPTY_LINE ) {
-        while ( getline(line, token, ' ') ) {
-            p = stof(token);
+    while ( line->good() && !EMPTY_LINE ) {
+        while ( getline(*line, token, ' ') ) {
+            p = atof(token.c_str());
             if (!(point_index > 0)) {
                 outfile << p;
             } else {
@@ -218,6 +225,7 @@ void convert_vtk(p_vtk vtk, const char* outfilename) {
             }
             point_index++;
         }
+        delete(line);
         line = readLine();
     }
     
@@ -236,29 +244,30 @@ void convert_vtk(p_vtk vtk, const char* outfilename) {
     outfile << bitmask; // first bitmask
     long poly = 0;
     line = readLine();
-    getline(line, token, ' ');
+    getline(*line, token, ' ');
     if (token != "POLYGONS") error("Unexpected token. Exiting...\n");
-    getline(line, token, ' ');
-    vtk->npolygons = stol(token);
-    getline(line, token, ' ');
-    vtk->polysize = stol(token);
+    getline(*line, token, ' ');
+    vtk->npolygons = atol(token.c_str());
+    getline(*line, token, ' ');
+    vtk->polysize = atol(token.c_str());
     
     long npolys = 0;
     int nvertices;
     line = readLine();
-    while ( line.good() && !EMPTY_LINE ) {
-        getline(line, token, ' ');
-        nvertices = stoi(token);
+    while ( line->good() && !EMPTY_LINE ) {
+        getline(*line, token, ' ');
+        nvertices = atoi(token.c_str());
         while (nvertices > 0) {
             if ( (npolys % 4 == 0) && (npolys > 0) ) {
                 outfile << "," << bitmask;
             }
-            getline(line, token, ' ');
-            poly = stoi(token);
+            getline(*line, token, ' ');
+            poly = atoi(token.c_str());
             npolys++;
             outfile << "," << poly;
             nvertices--;
         }
+        delete(line);
         line = readLine();
     }
     outfile << "],\n";
@@ -290,8 +299,11 @@ int main(int argc, const char * argv[]) {
     p_vtk vtk;
     vtk = vtk_open(argv[1]);
     convert_vtk(vtk, argv[2]);
+    //vtk = vtk_open("/Users/frank/Desktop/20140411_6465_1316_res1024_full_vh.vtk");
+    //convert_vtk(vtk, "/Users/frank/Desktop/out.json");
     
     fs.close();
+    delete vtk;
     
     return 0;
 }
