@@ -23,8 +23,8 @@ using namespace std;
 bool debug = false;
 
 typedef struct t_vtk_ {
-    char version[256];
-    char comment[256];
+    char* version;
+    char* comment;
     char dataset[256];
     long npoints;
     long npolygons;
@@ -42,6 +42,10 @@ static void error(string message) {
 }
 
 static void vtk_init(p_vtk vtk) {
+    vtk->version = (char*) malloc(256*sizeof(char));
+    vtk->comment = (char*) malloc(256*sizeof(char));
+    //vtk->dataset = (char*) malloc(256*sizeof(char));
+
     vtk->npoints = 0;
     vtk->npolygons = 0;
     vtk->polysize = 0;
@@ -203,7 +207,7 @@ void convert_vtk(p_vtk vtk, const char* outfilename) {
     << "\"" << vtk->npolygons << "\""
     << "},\n";
     string json_metadata = metadata.str();
-    string default_json = "\"scale\":1.0,\n\"materials\":[{\n  \"DbgColor\":15658734,\n  \"DbgIndex\":0,\n  \"DbgName\":\"default\",\n  \"vertexColors\": false\n  }],\n\"vertices\": [";
+    string default_json = "\"scale\":1.0,\n\"materials\":[{\"DbgColor\":15658734,\"DbgIndex\":0,\"DbgName\":\"default\",\"vertexColors\": false}],\n\"vertices\": [";
     // print header
     outfile << json_begin << json_metadata << default_json;
 
@@ -253,10 +257,10 @@ void convert_vtk(p_vtk vtk, const char* outfilename) {
     while ( line->good() && !EMPTY_LINE ) {
         getline(*line, token, ' ');
         nvertices = atoi(token.c_str());
-        while (nvertices > 0) {
-            if ( (npolys % 4 == 0) && (npolys > 0) ) {
-                outfile << "," << bitmask;
-            }
+        if (npolys > 0) {
+          outfile << "," << bitmask; // padding
+        }
+          while (nvertices > 0) {
             getline(*line, token, ' ');
             poly = atoi(token.c_str());
             npolys++;
@@ -291,13 +295,6 @@ int main(int argc, const char * argv[]) {
 		return EXIT_FAILURE;
 	}
 
-  if (argc == 4) {
-    string d;
-    d = argv[3];
-    if (d == "--debug") {
-       debug = true;
-     }
-  }
 
     p_vtk vtk;
     vtk = vtk_open(argv[1]);
