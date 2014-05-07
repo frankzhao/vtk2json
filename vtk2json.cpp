@@ -23,8 +23,8 @@ using namespace std;
 bool debug = false;
 
 typedef struct t_vtk_ {
-    char* version;
-    char* comment;
+    char version[256];
+    char comment[256];
     char dataset[256];
     long npoints;
     long npolygons;
@@ -42,10 +42,6 @@ static void error(string message) {
 }
 
 static void vtk_init(p_vtk vtk) {
-    vtk->version = (char*) malloc(256*sizeof(char));
-    vtk->comment = (char*) malloc(256*sizeof(char));
-    //vtk->dataset = (char*) malloc(256*sizeof(char));
-
     vtk->npoints = 0;
     vtk->npolygons = 0;
     vtk->polysize = 0;
@@ -63,20 +59,20 @@ static p_vtk vtk_alloc() {
  * Read support functions
  * ---------------------------------------------------------------------- */
 p_vtk vtk_open(const char *filename) {
-    
+
     p_vtk vtk = vtk_alloc();
     if (!vtk) {
         error("Out of memory");
         return NULL;
     }
     if (filename == NULL) error("Invalid filename");
-    
+
     // open file
     fs.open(filename, ifstream::in);
     if (!fs.is_open()) {
         error("Error opening file!");
     }
-    
+
     return vtk;
 }
 
@@ -86,7 +82,7 @@ static bool EMPTY_LINE = false;
 stringstream* readLine() {
     string line;
     getline(fs, line);
-    
+
     if (line.empty()) {
         EMPTY_LINE = true;
     } else {
@@ -97,11 +93,11 @@ stringstream* readLine() {
 
 void convert_vtk(p_vtk vtk, const char* outfilename) {
     string token;
-    
+
     // File version and identifier
     stringstream *line;
     line = readLine();
-    
+
     int count = 0;
     while ( getline(*line, token, ' ') ) {
         switch (count) {
@@ -126,11 +122,11 @@ void convert_vtk(p_vtk vtk, const char* outfilename) {
         }
         count++;
     }
-    
+
     // Header comment
     strcpy(vtk->comment, readLine()->str().c_str());
     //vtk->comment = readLine()->str();
-    
+
     // File format (binary/ascii)
     token = readLine()->str();
     if (token == "ASCII") {
@@ -140,19 +136,19 @@ void convert_vtk(p_vtk vtk, const char* outfilename) {
     } else {
         error("Could not read VTK format type (binary/ascii)");
     }
-    
+
     // Dataset
     line = readLine();
     getline(*line, token, ' ');
     if (token != "DATASET") error("Invalid dataset structure");
-    
+
     getline(*line, token, ' ');
     //vtk->dataset = token;
     //vtk->dataset = (char*) malloc(256*sizeof(char));
     sprintf(vtk->dataset, "%s", token.c_str());
     //strcpy(vtk->dataset, token.c_str());
-    
-    
+
+
     // Echo header for checking
     if (debug) {
         cout << "VTK Version: " << vtk->version << '\n';
@@ -164,7 +160,7 @@ void convert_vtk(p_vtk vtk, const char* outfilename) {
         }
         cout << "Dataset: " << vtk->dataset << '\n';
     }
-    
+
     /* Process data */
     // TODO split into read_points() and read_polygons
     // TODO check that we are reading floats
@@ -172,17 +168,17 @@ void convert_vtk(p_vtk vtk, const char* outfilename) {
     line = readLine();
     getline(*line, token, ' ');
     if (token != "POINTS") error("Invalid dataset attributes");
-    
+
     getline(*line, token, ' ');
     vtk->npoints = atol(token.c_str());
-    
+
     getline(*line, token, ' ');
     if (token == "float") {
         vtk->data_mode = VTK_FLOAT;
     } else if (token == "double" ) {
         vtk->data_mode = VTK_DOUBLE;
     }
-    
+
     if (debug) {
         cout << vtk->npoints << " POINTS ";
         if (vtk->data_mode == VTK_FLOAT) {
@@ -190,24 +186,24 @@ void convert_vtk(p_vtk vtk, const char* outfilename) {
         } else if (vtk->data_mode == VTK_DOUBLE) {
             cout << "double\n";
         }
-    
+
         cout << "Initializing JSON...\n";
     }
-    
+
     /* Initialise JSON file */
     outfile.open (outfilename);
-    
+
     string json_begin = "{\n";
     stringstream metadata;
-    metadata << "\"metadata\":{\"VTKVersion\":\""
-    << vtk->version
-    << "\",\"vertices\":"
-    << vtk->npoints
+    metadata << "\"metadata\":{\"formatVersion\":3,\"VTKVersion\":"
+    << "\"" << vtk->version << "\""
+    << ",\"vertices\":"
+    << "\"" << vtk->npoints << "\""
     << ",\"faces\":"
-    << vtk->npolygons
+    << "\"" << vtk->npolygons << "\""
     << "},\n";
     string json_metadata = metadata.str();
-    string default_json = "\"scale\":1.0,\n\"materials\":[{\"DbgColor\":15658734,\"DbgIndex\":0,\"DbgName\":\"default\",\"vertexColors\": false}],\n\"vertices\": [";
+    string default_json = "\"scale\":1.0,\n\"materials\":[{\n  \"DbgColor\":15658734,\n  \"DbgIndex\":0,\n  \"DbgName\":\"default\",\n  \"vertexColors\": false\n  }],\n\"vertices\": [";
     // print header
     outfile << json_begin << json_metadata << default_json;
 
@@ -228,17 +224,17 @@ void convert_vtk(p_vtk vtk, const char* outfilename) {
         delete(line);
         line = readLine();
     }
-    
+
     outfile << "],\n";
-    
+
     // Check that # of points is divisible by 3
     if (!(point_index % 3 == 0)) {
         error("Missing or extra points!\n");
     }
-    
+
     /* Polygons */
     outfile << "\"faces\": [";
-    
+
     // Read polygons
     int bitmask = 0;
     outfile << bitmask; // first bitmask
@@ -250,7 +246,7 @@ void convert_vtk(p_vtk vtk, const char* outfilename) {
     vtk->npolygons = atol(token.c_str());
     getline(*line, token, ' ');
     vtk->polysize = atol(token.c_str());
-    
+
     long npolys = 0;
     int nvertices;
     line = readLine();
@@ -271,40 +267,47 @@ void convert_vtk(p_vtk vtk, const char* outfilename) {
         line = readLine();
     }
     outfile << "],\n";
-    
+
     string json_footer = "\"morphTargets\": [],\n\"normals\": [],\n\"colors\": [],\n\"uvs\": [[]]\n}\n";
     outfile << json_footer;
-    
+
     // Report
     if (debug) {
         cout << "Parsed " << point_index/3 << "/" << vtk->npoints << " points\n";
         cout << "Parsed " << npolys << "/" << vtk->polysize << " polygon entries\n";
     }
-    
+
     // deallocate and close
     outfile.close();
-    
+
 }
 
 
 int main(int argc, const char * argv[]) {
-    
+
     if (argc < 3)
 	{
 		cout << "Usage: vtk2json [vtkfile] [outfile]\n";
 		return EXIT_FAILURE;
 	}
-    
-    
+
+  if (argc == 4) {
+    string d;
+    d = argv[3];
+    if (d == "--debug") {
+       debug = true;
+     }
+  }
+
     p_vtk vtk;
     vtk = vtk_open(argv[1]);
     convert_vtk(vtk, argv[2]);
     //vtk = vtk_open("/Users/frank/Desktop/20140411_6465_1316_res1024_full_vh.vtk");
     //convert_vtk(vtk, "/Users/frank/Desktop/out.json");
-    
+
     fs.close();
     delete vtk;
-    
+
     return 0;
 }
 
